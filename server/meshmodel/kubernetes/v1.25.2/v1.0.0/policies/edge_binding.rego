@@ -1,11 +1,10 @@
 package meshmodel_policy
 
-import data.common.contains
+import data.common.array_pos
 import data.common.extract_components
-import data.common.get_array_pos
-import future.keywords.in
+import rego.v1
 
-edge_binding_relationship[results] {
+edge_binding_relationship contains results if {
 	relationship := data.relationships[_]
 	relationship.subType in {"Mount", "Permission"}
 
@@ -18,7 +17,7 @@ edge_binding_relationship[results] {
 
 	to_selectors := {kind: selectors |
 		selectors := selector_set.allow.to[_]
-		val := selectors.match[key]
+		some key in selectors.match
 
 		key != "self"
 
@@ -35,11 +34,11 @@ edge_binding_relationship[results] {
 		type = key
 	}
 
-	# This is a set of set as it contains results for a particular binding_type and each binding_type can be binded by different type of nodes.
+	# This is a set of set as it contains results for a particular binding_type
+	# and each binding_type can be binded by different type of nodes.
 	evaluation_results := {result |
 		some comp in binding_comps
 		binding_resources := extract_components(input.services, [{"kind": comp}])
-		print(binding_resources)
 
 		count(binding_resources) > 0
 
@@ -70,7 +69,7 @@ edge_binding_relationship[results] {
 	}}
 }
 
-evaluate[results] {
+evaluate contains results if {
 	services_map := {service.traits.meshmap.id: service |
 		service := input.services[_]
 	}
@@ -93,7 +92,7 @@ evaluate[results] {
 	}
 }
 
-is_related(resource1, resource2, from_selectors) {
+is_related(resource1, resource2, from_selectors) if {
 	# print(resource1, resource2, from_selectors)
 	match_results := [result |
 		some i
@@ -109,23 +108,24 @@ is_related(resource1, resource2, from_selectors) {
 }
 
 # If none of the match paths ("from" and "to") doesn't contain array field in between, then it is a normal lookup.
-is_feasible(from, to, resource1, resource2) {
-	not contains(to, "_")
+is_feasible(from, to, resource1, resource2) if {
+	not "_" in to
 	object.get(resource1, from, "") == object.get(resource2, to, "")
 }
 
-# If any of the match paths contains array field in between then the path needs to be resolved before checking for their equality.
-# "from" or "to" any of them can contain array in their path hence "is_feasible" is overrided. 
-is_feasible(from, to, resource1, resource2) {
+# If any of the match paths contains array field in between then the path
+# needs to be resolved before checking for their equality.
+# "from" or "to" any of them can contain array in their path hence "is_feasible" is overrided.
+is_feasible(from, to, resource1, resource2) if {
 	match(from, to, resource1, resource2)
 }
 
-is_feasible(from, to, resource1, resource2) {
+is_feasible(from, to, resource1, resource2) if {
 	match(to, from, resource2, resource1)
 }
 
-match(from, to, resource1, resource2) {
-	contains(to, "_")
+match(from, to, resource1, resource2) if {
+	"_" in to
 	index := get_array_pos(to)
 	prefix_path := array.slice(to, 0, index)
 	suffix_path := array.slice(to, index + 1, count(to))
